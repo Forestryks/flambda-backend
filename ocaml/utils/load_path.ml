@@ -17,13 +17,29 @@ open Local_store
 module Dir : sig
   type t
 
+<<<<<<< HEAD
   val path : t -> string
   val files : t -> (string * string) list
   val basenames : t -> string list
   val hidden : t -> bool
+||||||| parent of 17aaee1a (Refactor load_path.ml)
+(* Mapping from basenames to full filenames *)
+type registry = string STbl.t
+=======
+  val path : t -> string
+  val files : t -> string list
+  val hidden : t -> bool
+>>>>>>> 17aaee1a (Refactor load_path.ml)
 
+<<<<<<< HEAD
   val create : hidden:bool -> string -> t
   val create_libloc : hidden:bool -> libloc:string -> string -> t
+||||||| parent of 17aaee1a (Refactor load_path.ml)
+let visible_files : registry ref = s_table STbl.create 42
+let visible_files_uncap : registry ref = s_table STbl.create 42
+=======
+  val create : hidden:bool -> string -> t
+>>>>>>> 17aaee1a (Refactor load_path.ml)
 
   val find : t -> string -> string option
   val find_uncap : t -> string -> string option
@@ -153,6 +169,81 @@ module Path_cache = struct
       find fn visible_files hidden_files
 end
 
+type visibility = Visible | Hidden
+
+(** Stores cached paths to files *)
+module Path_cache : sig
+  (* Clear cache *)
+  val reset : unit -> unit
+
+  (* Same as [add] below, but will replace existing entries.
+
+     [prepend_add] is faster than [add] and intened for use in [init] and [remove_dir]:
+     since we are starting from an empty cache, we can avoid checking whether a unit name
+     already exists in the cache simply by adding entries in reverse order. *)
+  val prepend_add : Dir.t -> unit
+
+  (* Add path to cache. If path with same basename is already in cache, skip adding. *)
+  val add : Dir.t -> unit
+
+  (* Search for a basename in cache. Ignore case if [uncap] is true *)
+  val find : uncap:bool -> string -> string * visibility
+end = struct
+  module STbl = Misc.Stdlib.String.Tbl
+
+  (* Mapping from basenames to full filenames *)
+  type registry = string STbl.t
+
+  let visible_files : registry ref = s_table STbl.create 42
+  let visible_files_uncap : registry ref = s_table STbl.create 42
+
+  let hidden_files : registry ref = s_table STbl.create 42
+  let hidden_files_uncap : registry ref = s_table STbl.create 42
+
+  let reset () =
+    STbl.clear !hidden_files;
+    STbl.clear !hidden_files_uncap;
+    STbl.clear !visible_files;
+    STbl.clear !visible_files_uncap
+
+  let prepend_add dir =
+    List.iter (fun base ->
+        let fn = Filename.concat (Dir.path dir) base in
+        if Dir.hidden dir then begin
+          STbl.replace !hidden_files base fn;
+          STbl.replace !hidden_files_uncap (String.uncapitalize_ascii base) fn
+        end else begin
+          STbl.replace !visible_files base fn;
+          STbl.replace !visible_files_uncap (String.uncapitalize_ascii base) fn
+        end
+      ) (Dir.files dir)
+
+  let add dir =
+    let update base fn visible_files hidden_files =
+      if (Dir.hidden dir) && not (STbl.mem !hidden_files base) then
+        STbl.replace !hidden_files base fn
+      else if not (STbl.mem !visible_files base) then
+        STbl.replace !visible_files base fn
+    in
+    List.iter
+      (fun base ->
+         let fn = Filename.concat (Dir.path dir) base in
+         update base fn visible_files hidden_files;
+         let ubase = String.uncapitalize_ascii base in
+         update ubase fn visible_files_uncap hidden_files_uncap)
+      (Dir.files dir)
+
+  let find fn visible_files hidden_files =
+    try (STbl.find !visible_files fn, Visible) with
+    | Not_found -> (STbl.find !hidden_files fn, Hidden)
+
+  let find ~uncap fn =
+    if uncap then
+      find (String.uncapitalize_ascii fn) visible_files_uncap hidden_files_uncap
+    else
+      find fn visible_files hidden_files
+end
+
 type auto_include_callback =
   (Dir.t -> string -> string option) -> string -> string
 
@@ -188,12 +279,20 @@ let init ~auto_include ~visible ~hidden =
   reset ();
   visible_dirs := List.rev_map (Dir.create ~hidden:false) visible;
   hidden_dirs := List.rev_map (Dir.create ~hidden:true) hidden;
+<<<<<<< HEAD
   List.iter (fun (libloc : Clflags.Libloc.t) ->
     visible_dirs := Misc.rev_map_end (fun lib -> Dir.create_libloc ~hidden:false ~libloc:libloc.path lib) libloc.libs !visible_dirs;
     hidden_dirs := Misc.rev_map_end (fun lib -> Dir.create_libloc ~hidden:true ~libloc:libloc.path lib) libloc.hidden_libs !hidden_dirs
   ) !Clflags.libloc;
   List.iter Path_cache.prepend_add !hidden_dirs;
   List.iter Path_cache.prepend_add !visible_dirs;
+||||||| parent of 17aaee1a (Refactor load_path.ml)
+  List.iter prepend_add !hidden_dirs;
+  List.iter prepend_add !visible_dirs;
+=======
+  List.iter Path_cache.prepend_add !hidden_dirs;
+  List.iter Path_cache.prepend_add !visible_dirs;
+>>>>>>> 17aaee1a (Refactor load_path.ml)
   auto_include_callback := auto_include
 
 let remove_dir dir =
