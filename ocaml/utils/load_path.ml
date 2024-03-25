@@ -14,28 +14,6 @@
 
 open Local_store
 
-let split_once sep s =
-  let index = String.index s sep in
-  String.sub s 0 index, String.sub s (index + 1) (String.length s - index - 1)
-
-module For_lib = struct
-  type t = {
-    paths: (string * string) list
-  }
-
-  let read path =
-    let fd = open_in path in
-    let rec loop acc =
-      try
-        let line = input_line fd in
-        let (fn, path) = split_once ' ' line in
-        loop ((fn, path) :: acc)
-      with End_of_file -> acc
-    in
-    let paths = loop [] in
-    { paths }
-end
-
 module Dir : sig
   type t
 
@@ -90,10 +68,28 @@ end = struct
   let create ~hidden path =
     { path; files = Array.to_list (readdir_compat path) |> List.map (fun base -> base, Filename.concat path base); hidden }
 
+  let read_libloc path =
+    let fd = open_in path in
+    let rec loop acc =
+      try
+        let line = input_line fd in
+        let (fn, path) = Misc.Stdlib.String.split_first_exn ~split_on:' ' line in
+        loop ((fn, path) :: acc)
+      with End_of_file -> acc
+    in
+    loop []
+
   let create_libloc ~hidden ~libloc libname =
-    let path = Filename.concat libloc libname in
-    let { For_lib.paths } = For_lib.read (Filename.concat path libname) in
-    { path; files = paths; hidden }
+    let libloc_lib_path = Filename.concat libloc libname in
+    let files = read_libloc (Filename.concat libloc_lib_path libname) in
+    let files = List.map (fun (base, path) ->
+      let path = if Filename.is_relative path then
+        Filename.concat libloc_lib_path path
+      else
+        path
+      in
+      (base, path)) files in
+    { path = libloc_lib_path; files; hidden }
 end
 
 type visibility = Visible | Hidden
