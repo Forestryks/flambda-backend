@@ -27,7 +27,8 @@ module Dir : sig
 type registry = string STbl.t
 =======
   val path : t -> string
-  val files : t -> string list
+  val files : t -> (string * string) list
+  val basenames : t -> string list
   val hidden : t -> bool
 >>>>>>> 17aaee1a (Refactor load_path.ml)
 
@@ -82,6 +83,7 @@ end = struct
       [||]
 
   let create ~hidden path =
+<<<<<<< HEAD
     { path; files = Array.to_list (readdir_compat path) |> List.map (fun base -> base, Filename.concat path base); hidden }
 
   let read_libloc path =
@@ -167,6 +169,11 @@ module Path_cache = struct
       find (String.uncapitalize_ascii fn) visible_files_uncap hidden_files_uncap
     else
       find fn visible_files hidden_files
+||||||| parent of e441b505 (Make [Load_path.Dir] store full paths)
+    { path; files = Array.to_list (readdir_compat path); hidden }
+=======
+    { path; files = Array.to_list (readdir_compat path) |> List.map (fun base -> base, Filename.concat path base); hidden }
+>>>>>>> e441b505 (Make [Load_path.Dir] store full paths)
 end
 
 type visibility = Visible | Hidden
@@ -207,8 +214,7 @@ end = struct
     STbl.clear !visible_files_uncap
 
   let prepend_add dir =
-    List.iter (fun base ->
-        let fn = Filename.concat (Dir.path dir) base in
+    List.iter (fun (base, fn) ->
         if Dir.hidden dir then begin
           STbl.replace !hidden_files base fn;
           STbl.replace !hidden_files_uncap (String.uncapitalize_ascii base) fn
@@ -226,8 +232,7 @@ end = struct
         STbl.replace !visible_files base fn
     in
     List.iter
-      (fun base ->
-         let fn = Filename.concat (Dir.path dir) base in
+      (fun (base, fn) ->
          update base fn visible_files hidden_files;
          let ubase = String.uncapitalize_ascii base in
          update ubase fn visible_files_uncap hidden_files_uncap)
